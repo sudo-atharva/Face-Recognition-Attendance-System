@@ -1,0 +1,13 @@
+# Environment / downloaded models (install.bat recreates these)
+venv/
+models/
+__pycache__/
+
+# Runtime data: biometric face data, snapshots, logs, local settings
+FaceDB/
+Intrusions/
+TrainingImage/
+lab_log.csv
+settings.json
+timetable.csv
+Attendance/*.csv
