@@ -5,4 +5,6 @@ if not exist venv\Scripts\pythonw.exe (
     call install.bat
     if not exist venv\Scripts\pythonw.exe exit /b 1
 )
-start "" venv\Scripts\pythonw.exe lab_monitor.py
+rem Starts the website in the background and opens it in the browser.
+rem Log: server.log. To stop: close it from Task Manager (pythonw.exe) or run stop.bat
+start "" venv\Scripts\pythonw.exe app.py --open

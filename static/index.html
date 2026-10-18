@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lab Monitor</title>
+<style>
+:root{--bg:#f1f3f5;--card:#fff;--fg:#1f2328;--muted:#656d76;--line:#d0d7de;--blue:#2563eb;--green:#15803d;
+  --red:#c62828;--darkred:#7f1d1d;--orange:#d97706;--grey:#6b7280;--present:#dcfce7;--absent:#fee2e2}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--fg:#e6edf3;--muted:#8d96a0;--line:#30363d;
+  --present:#14532d;--absent:#5f1d1d}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0 12px 0 0}
+button,select,input{font:inherit;padding:7px 12px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button{cursor:pointer}
+button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+button.danger{color:var(--red)}
+.spacer{flex:1}
+main{display:grid;grid-template-columns:minmax(0,640px) minmax(0,1fr);gap:16px;padding:16px}
+@media (max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+#status{color:#fff;font-weight:700;font-size:18px;padding:14px;border-radius:8px 8px 0 0;text-align:center}
+#video{width:100%;display:block;background:#000;aspect-ratio:4/3;border-radius:0 0 8px 8px}
+.info{color:var(--muted);font-size:13px;margin-top:6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px;min-width:0}
+nav{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+nav button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+section{display:none}section.on{display:block}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr.Present td{background:var(--present)}tr.Absent td{background:var(--absent)}
+form.row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+form.row input{width:120px}
+.settings label{display:block;margin:10px 0 2px;font-weight:600}
+.settings input{width:100%}
+.settings small{color:var(--muted);display:block}
+.settings select{width:100%}
+.row2{display:flex;gap:6px;align-items:center}.row2 select,.row2 input{flex:1}
+.thumbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.thumbs figure{margin:0;cursor:pointer;border:3px solid transparent;border-radius:6px;text-align:center;font-size:13px}
+.thumbs figure.on{border-color:var(--blue)}.thumbs img{width:140px;display:block;border-radius:4px}
+video{width:100%;max-height:360px;background:#000;border-radius:6px}
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);
+  padding:10px 16px;border-radius:8px;display:none}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--fg);width:min(380px,92vw)}
+dialog input{width:100%;margin:4px 0 10px}
+img.thumb{height:40px;border-radius:4px}
+h3{margin:14px 0 6px}
+.counts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.counts span{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-weight:600}
+.counts .Present{background:var(--present)}.counts .Absent{background:var(--absent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lab Monitor</h1>
+  <button class="primary" onclick="openEnroll()">Enroll person</button>
+  <label>Mode <select id="mode" onchange="setMode(this.value)"></select></label>
+  <button id="wakeBtn" style="display:none" onclick="api('/api/wake',{method:'POST'})">Wake camera</button>
+  <span class="spacer"></span>
+  <a href="/logout"><button>Log out</button></a>
+</header>
+
+<main>
+  <div>
+    <div id="status" style="background:var(--grey)">Connecting...</div>
+    <img id="video" src="/video" alt="Live camera">
+    <div class="counts" id="counts"></div>
+    <div class="info" id="info"></div>
+    <div class="info" id="recinfo"></div>
+    <img id="video2" alt="WiFi camera" style="display:none;width:100%;margin-top:8px;border-radius:8px;background:#000">
+    <div class="info" id="pirinfo"></div>
+    <button id="cancelEnroll" style="display:none;margin-top:8px" onclick="api('/api/enroll/cancel',{method:'POST'})">Cancel enrollment</button>
+  </div>
+
+  <div class="card">
+    <nav id="tabs">
+      <button data-tab="attendance">Attendance</button>
+      <button data-tab="timetable">Timetable</button>
+      <button data-tab="log">Alert log</button>
+      <button data-tab="recordings">Recordings</button>
+      <button data-tab="users">Users</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+
+    <section id="attendance">
+      <b id="attTitle"></b>
+      <div class="scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Status</th><th>Time</th></tr></thead>
+        <tbody id="attBody"></tbody></table></div>
+      <h3>Attendance sheets</h3>
+      <div class="scroll"><table><tbody id="sheetBody"></tbody></table></div>
+    </section>
+
+    <section id="timetable">
+      <div class="scroll"><table><thead><tr><th>Day</th><th>Start</th><th>End</th><th>Subject</th><th>Faculty</th><th></th></tr></thead>
+        <tbody id="ttBody"></tbody></table></div>
+      <form class="row" onsubmit="addSlot(event)">
+        <select name="Day"><option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option></select>
+        <input type="time" name="Start" value="09:00" required>
+        <input type="time" name="End" value="10:00" required>
+        <input name="Subject" placeholder="Subject" required>
+        <input name="Faculty" placeholder="Faculty">
+        <button class="primary">Add slot</button>
+      </form>
+    </section>
+
+    <section id="log">
+      <div class="scroll"><table><thead><tr><th>Date</th><th>Time</th><th>Name</th><th>ID</th><th>Score</th><th>Snapshot</th></tr></thead>
+        <tbody id="logBody"></tbody></table></div>
+    </section>
+
+    <section id="recordings">
+      <p class="info">WiFi camera clips, recorded automatically on alerts.</p>
+      <video id="player" controls style="display:none"></video>
+      <div class="scroll"><table><tbody id="recBody"></tbody></table></div>
+    </section>
+
+    <section id="users">
+      <button class="primary" onclick="openEnroll()">Add user</button>
+      <div class="scroll"><table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Face samples</th><th></th></tr></thead>
+        <tbody id="userBody"></tbody></table></div>
+    </section>
+
+    <section id="settings">
+      <form class="settings" id="settingsForm" onsubmit="saveSettings(event)">
+        <h3>Main camera (face recognition)</h3>
+        <div class="row2">
+          <select name="CAMERA_INDEX" id="s_CAMERA_INDEX"></select>
+          <button type="button" onclick="scanCams()">Scan cameras</button>
+        </div>
+        <small>Pick which camera watches faces. Scan shows a picture from each one; click a picture to choose it.</small>
+        <div id="camList" class="thumbs"></div>
+
+        <h3>WiFi camera (records video on alert)</h3>
+        <label for="s_CAM2_TYPE">Type</label>
+        <select name="CAM2_TYPE" id="s_CAM2_TYPE" onchange="camFields()">
+          <option value="off">Off</option>
+          <option value="ipwebcam">Phone: IP Webcam app (Android)</option>
+          <option value="rtsp">IP / CCTV camera (RTSP)</option>
+          <option value="esp32cam">ESP32-CAM</option>
+          <option value="http">Other HTTP / MJPEG camera</option>
+          <option value="usb">Extra USB camera</option>
+          <option value="custom">Custom stream URL</option>
+        </select>
+        <div class="cam2 net usb"><label for="s_CAM2_IP" id="ipLabel">IP address</label>
+          <input name="CAM2_IP" id="s_CAM2_IP" placeholder="192.168.1.50"></div>
+        <div class="cam2 net"><label for="s_CAM2_PORT">Port</label>
+          <input name="CAM2_PORT" id="s_CAM2_PORT" type="number" min="0" max="65535"><small>0 = default for this type</small></div>
+        <div class="cam2 net"><label for="s_CAM2_USER">Username</label>
+          <input name="CAM2_USER" id="s_CAM2_USER" autocomplete="off"></div>
+        <div class="cam2 net"><label for="s_CAM2_PASS">Password</label>
+          <input name="CAM2_PASS" id="s_CAM2_PASS" type="password" autocomplete="new-password" placeholder="leave empty to keep saved"></div>
+        <div class="cam2 rtsp http"><label for="s_CAM2_PATH">Stream path</label>
+          <input name="CAM2_PATH" id="s_CAM2_PATH" placeholder="empty = default"><small>From the camera manual, e.g. stream1, h264/ch1/main</small></div>
+        <div class="cam2 custom"><label for="s_CAM2_URL">Stream URL</label>
+          <input name="CAM2_URL" id="s_CAM2_URL" placeholder="rtsp://... or http://..."></div>
+        <small id="cam2Url"></small>
+        <p class="row2">
+          <button type="button" onclick="testCam()">Test (one frame)</button>
+          <button type="button" onclick="livePreview()" id="liveBtn">Live view (saved camera)</button>
+        </p>
+        <div id="camTest" class="info"></div>
+
+        <h3>PIR sensor (ESP32 over UART)</h3>
+        <label for="s_SERIAL_PORT">Port</label>
+        <div class="row2"><input name="SERIAL_PORT" id="s_SERIAL_PORT" list="portList" placeholder="COM5 (empty = off)">
+          <button type="button" onclick="loadPorts()">Refresh ports</button></div>
+        <datalist id="portList"></datalist>
+        <small id="portHint">Empty = off: camera always on. With a sensor, camera + face model sleep until motion.</small>
+        <label for="s_SERIAL_BAUD">Baud rate</label><input name="SERIAL_BAUD" id="s_SERIAL_BAUD">
+        <label for="s_WAKE_SECONDS">Stay awake (seconds after last motion)</label><input name="WAKE_SECONDS" id="s_WAKE_SECONDS">
+        <small id="pirStatus"></small>
+
+        <h3>Detection & recording</h3>
+        <div id="genericSettings"></div>
+        <p><button class="primary">Save settings</button> <button type="button" onclick="resetDefaults()">Reset defaults</button></p>
+      </form>
+      <h3>Change password</h3>
+      <form class="row" onsubmit="changePw(event)">
+        <input type="password" name="old" placeholder="Current" required>
+        <input type="password" name="new" placeholder="New (6+ chars)" required>
+        <button>Change</button>
+      </form>
+    </section>
+  </div>
+</main>
+
+<dialog id="enrollDlg">
+  <form method="dialog" onsubmit="startEnroll(event)">
+    <h3>Enroll person</h3>
+    <label>ID / Enrollment<input name="id" required pattern="[A-Za-z0-9]+" title="Letters and digits only"></label>
+    <label>Name<input name="name"></label>
+    <p class="info">Existing ID adds more samples (name can be empty). Stand in front of the
+      lab camera and follow the prompts in the status bar. Only one face in view.</p>
+    <button class="primary">Start capture</button>
+    <button type="button" onclick="enrollDlg.close()">Cancel</button>
+  </form>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const COLORS = {green:"var(--green)", red:"var(--red)", darkred:"var(--darkred)", grey:"var(--grey)", orange:"var(--orange)", blue:"var(--blue)"};
+let tab = new URLSearchParams(location.search).get("tab") || (() => { try { return localStorage.getItem("tab"); } catch (e) {} })() || "attendance", lastNotice = null, lastLogCount = -1;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {...opts, headers: {"Content-Type": "application/json"},
+                               body: opts.body && JSON.stringify(opts.body)});
+  if (r.status === 401) { location = "/login"; return {}; }
+  const j = await r.json();
+  if (j.error) toast(j.error);
+  return j;
+}
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = "none", 4000);
+}
+const kb = n => n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.ceil(n / 1e3) + " KB";
+
+function showTab(name) {
+  tab = name;
+  try { localStorage.setItem("tab", name); } catch (e) {}
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === name));
+  ({timetable: loadTimetable, log: loadLog, recordings: loadRecordings, users: loadUsers,
+    settings: loadSettings, attendance: loadSheets})[name]?.();
+}
+document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+async function poll() {
+  try {
+    const s = await api("/api/state");
+    $("#status").textContent = s.status;
+    $("#status").style.background = COLORS[s.color] || s.color;
+    const sel = $("#mode");
+    if (!sel.options.length) sel.innerHTML = s.modes.map(m => `<option>${esc(m)}</option>`).join("");
+    if (document.activeElement !== sel) sel.value = s.mode;
+    $("#info").textContent = `${s.enrolled} people enrolled, ${s.samples} face samples | in view: main camera ${s.in_view.main}, WiFi camera ${s.in_view.wifi}` + (s.camera_ok ? "" : " | main camera offline");
+    $("#recinfo").textContent = "WiFi camera: " + s.recorder;
+    const v2 = $("#video2"), v2on = s.recorder.startsWith("watching");
+    if (v2on && !v2.src) v2.src = "/video2"; else if (!v2on && v2.src) v2.removeAttribute("src");
+    v2.style.display = v2on ? "block" : "none";
+    $("#pirinfo").textContent = "PIR sensor: " + s.pir + (s.last_motion ? ` | last motion ${s.last_motion}` : "")
+      + (s.pir_gating ? (s.awake ? ` | awake, ${s.awake_left}s left` : " | camera sleeping") : "");
+    $("#wakeBtn").style.display = s.awake ? "none" : "";
+    if ($("#pirStatus")) $("#pirStatus").textContent = "Status: " + s.pir;
+    if ($("#cam2Url")) $("#cam2Url").textContent = s.cam2_url ? "Saved stream URL: " + s.cam2_url : "WiFi camera off";
+    const c = s.count;
+    $("#counts").innerHTML = `<span>In lab: ${c.total}</span><span>Faculty: ${c.faculty}</span><span>Students: ${c.students}</span>
+      <span class="${c.staff}">Staff: ${c.staff}${c.staff_names.length ? " (" + esc(c.staff_names.join(", ")) + ")"
+        : c.staff_last_seen ? " | last seen " + esc(c.staff_last_seen) : ""}</span>`;
+    $("#cancelEnroll").style.display = s.enrolling ? "" : "none";
+    $("#attTitle").textContent = s.attendance ? `${s.attendance.title} | Present ${s.attendance.present}/${s.attendance_rows.length}`
+                                              : "No class scheduled right now";
+    $("#attBody").innerHTML = s.attendance_rows.map(r =>
+      `<tr class="${r.status}"><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td>${r.status}</td><td>${esc(r.time)}</td></tr>`).join("");
+    if (lastNotice !== null && s.notice && s.notice !== lastNotice) { toast(s.notice); if (tab === "users") loadUsers(); }
+    lastNotice = s.notice;
+    if (s.log_count !== lastLogCount && tab === "log") loadLog();
+    lastLogCount = s.log_count;
+  } catch (e) {
+    $("#status").textContent = "Server not reachable";
+    $("#status").style.background = COLORS.grey;
+  }
+  setTimeout(poll, 1000);
+}
+
+async function setMode(mode) { await api("/api/mode", {method: "POST", body: {mode}}); }
+
+async function loadTimetable() {
+  const rows = await api("/api/timetable");
+  $("#ttBody").innerHTML = rows.map((r, i) => `<tr><td>${esc(r.Day)}</td><td>${esc(r.Start)}</td><td>${esc(r.End)}</td>
+    <td>${esc(r.Subject)}</td><td>${esc(r.Faculty)}</td><td><button class="danger" onclick="delSlot(${i})">Delete</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="info">No slots yet. Lab is in alert mode all the time.</td></tr>`;
+}
+async function addSlot(e) {
+  e.preventDefault();
+  const r = await api("/api/timetable", {method: "POST", body: Object.fromEntries(new FormData(e.target))});
+  if (r.ok) loadTimetable();
+}
+async function delSlot(i) { if (confirm("Delete this slot?")) { await api("/api/timetable/" + i, {method: "DELETE"}); loadTimetable(); } }
+
+async function loadLog() {
+  const rows = await api("/api/log");
+  $("#logBody").innerHTML = rows.map(r => {
+    const snap = "/files/snapshots/" + encodeURIComponent(r.Snapshot);
+    return `<tr><td>${esc(r.Date)}</td><td>${esc(r.Time)}</td><td>${esc(r.Name)}</td><td>${esc(r.Enrollment)}</td>
+      <td>${esc(r.Confidence)}</td><td><a href="${snap}" target="_blank"><img class="thumb" src="${snap}" alt="snapshot"></a></td></tr>`;
+  }).join("") || `<tr><td class="info">No alerts yet</td></tr>`;
+}
+
+async function loadRecordings() {
+  const files = await api("/api/files/recordings");
+  $("#recBody").innerHTML = files.map(f => `<tr><td>${esc(f.name)}</td><td>${kb(f.size)}</td>
+    <td><button data-f="${esc(encodeURIComponent(f.name))}" onclick="play(this.dataset.f)">Play</button>
+    <a href="/files/recordings/${encodeURIComponent(f.name)}" download><button>Download</button></a></td></tr>`).join("")
+    || `<tr><td class="info">No recordings yet. Set the WiFi camera URL in Settings.</td></tr>`;
+}
+function play(name) { const p = $("#player"); p.style.display = "block"; p.src = "/files/recordings/" + name; p.play(); }
+
+async function loadSheets() {
+  const files = await api("/api/files/sheets");
+  $("#sheetBody").innerHTML = files.map(f => `<tr><td><a href="/files/sheets/${encodeURIComponent(f.name)}">${esc(f.name)}</a></td>
+    <td>${kb(f.size)}</td></tr>`).join("") || `<tr><td class="info">None yet</td></tr>`;
+}
+
+async function loadUsers() {
+  const users = await api("/api/users");
+  $("#userBody").innerHTML = users.map(u => `<tr><td>${esc(u.id)}</td><td>${esc(u.name)}</td><td>${u.role}</td>
+    <td>${u.samples || "0 (enroll face!)"}</td><td>
+    <button data-id="${esc(u.id)}" onclick="addSamples(this.dataset.id)">Add samples</button>
+    <button data-id="${esc(u.id)}" onclick="renameUser(this.dataset.id)">Rename</button>
+    <button data-id="${esc(u.id)}" data-role="${u.role === "Faculty" ? "Student" : "Faculty"}"
+      onclick="setRole(this.dataset.id, this.dataset.role)">Make ${u.role === "Faculty" ? "student" : "faculty"}</button>
+    <button class="danger" data-id="${esc(u.id)}" onclick="deleteUser(this.dataset.id)">Delete</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="info">No users yet</td></tr>`;
+}
+async function addSamples(id) { const r = await api("/api/enroll", {method: "POST", body: {id}}); if (r.ok) toast("Look at the camera and follow the prompts"); }
+async function renameUser(id) {
+  const name = prompt("New name for " + id);
+  if (name) { await api("/api/users/" + encodeURIComponent(id), {method: "PATCH", body: {name}}); loadUsers(); }
+}
+async function setRole(id, role) { await api("/api/users/" + encodeURIComponent(id), {method: "PATCH", body: {role}}); loadUsers(); }
+async function deleteUser(id) {
+  if (!confirm(`Delete ${id} and their face data? Past attendance sheets and logs are kept.`)) return;
+  await api("/api/users/" + encodeURIComponent(id), {method: "DELETE"}); loadUsers();
+}
+
+function openEnroll() { $("#enrollDlg form").reset(); $("#enrollDlg").showModal(); }
+async function startEnroll(e) {
+  e.preventDefault();
+  const r = await api("/api/enroll", {method: "POST", body: Object.fromEntries(new FormData(e.target))});
+  if (r.ok) { $("#enrollDlg").close(); toast("Look at the camera and follow the prompts"); }
+}
+
+async function loadSettings() {
+  const items = await api("/api/settings");
+  const sel = $("#s_CAMERA_INDEX");
+  sel.innerHTML = [0, 1, 2, 3, 4, 5].map(i => `<option value="${i}">Camera ${i}</option>`).join("");
+  let generic = "";
+  for (const s of items) {
+    const el = $("#s_" + s.key);
+    if (el) { el.value = s.value; el.dataset.default = s.default; continue; }
+    generic += `<label for="s_${s.key}">${esc(s.key.replace(/_/g, " ").toLowerCase())}</label>
+      <input id="s_${s.key}" name="${s.key}" value="${esc(s.value)}" data-default="${esc(s.default)}"><small>${esc(s.help)}</small>`;
+  }
+  $("#genericSettings").innerHTML = generic;
+  camFields();
+  loadPorts();
+}
+function resetDefaults() {
+  document.querySelectorAll("#settingsForm input, #settingsForm select").forEach(i => {
+    if (i.dataset.default !== undefined) i.value = i.dataset.default;
+  });
+  camFields();
+}
+function camFields() {
+  const t = $("#s_CAM2_TYPE").value;
+  const groups = {ipwebcam: ["net"], rtsp: ["net", "rtsp"], esp32cam: ["net"], http: ["net", "http"], usb: ["usb"], custom: ["custom"]}[t] || [];
+  document.querySelectorAll(".cam2").forEach(d => d.style.display = groups.some(g => d.classList.contains(g)) ? "" : "none");
+  $("#ipLabel").textContent = t === "usb" ? "Camera number (e.g. 1)" : "IP address";
+}
+async function scanCams() {
+  $("#camList").textContent = "Scanning cameras 0-5 (takes a few seconds)...";
+  const cams = await api("/api/cameras");
+  const sel = $("#s_CAMERA_INDEX"), cur = sel.value;
+  if (!cams.length) { $("#camList").textContent = "No cameras found"; return; }
+  sel.innerHTML = cams.map(c => `<option value="${c.index}">Camera ${c.index}${c.in_use ? " (in use)" : ""}</option>`).join("");
+  sel.value = cams.some(c => String(c.index) === cur) ? cur : cams[0].index;
+  $("#camList").innerHTML = cams.map(c => `<figure data-i="${c.index}" class="${String(c.index) === sel.value ? "on" : ""}">
+    <img src="${c.thumb}" alt="Camera ${c.index}">Camera ${c.index}${c.in_use ? " (in use)" : ""}</figure>`).join("");
+  document.querySelectorAll("#camList figure").forEach(f => f.onclick = () => {
+    sel.value = f.dataset.i;
+    document.querySelectorAll("#camList figure").forEach(g => g.classList.toggle("on", g === f));
+  });
+}
+async function loadPorts() {
+  const ports = await api("/api/serial/ports");
+  $("#portList").innerHTML = ports.map(p => `<option value="${esc(p.port)}">${esc(p.desc)}</option>`).join("");
+  $("#portHint").textContent = (ports.length ? "Found: " + ports.map(p => `${p.port} (${p.desc})`).join(", ") + ". "
+    : "No serial ports found. ") + "Empty = off: camera always on. With a sensor, camera + face model sleep until motion.";
+}
+function livePreview() {
+  const btn = $("#liveBtn");
+  if (btn.dataset.on) { $("#camTest").innerHTML = ""; delete btn.dataset.on; btn.textContent = "Live view (saved camera)"; return; }
+  btn.dataset.on = 1; btn.textContent = "Stop preview";
+  $("#camTest").innerHTML = `<img style="max-width:100%;border-radius:6px" src="/video2?t=${Date.now()}" alt="WiFi camera">`;
+}
+async function saveSettings(e) {
+  e.preventDefault();
+  const r = await api("/api/settings", {method: "POST", body: Object.fromEntries(new FormData(e.target))});
+  if (r.ok) { toast("Settings saved"); $("#s_CAM2_PASS").value = ""; }
+}
+async function testCam() {
+  $("#camTest").textContent = "Connecting...";
+  const r = await fetch("/api/cam2/test", {method: "POST", headers: {"Content-Type": "application/json"},
+                                          body: JSON.stringify(Object.fromEntries(new FormData($("#settingsForm"))))});
+  $("#camTest").innerHTML = r.ok ? `<img style="max-width:100%;border-radius:6px" src="${URL.createObjectURL(await r.blob())}">`
+                                 : esc(await r.text());
+}
+async function changePw(e) {
+  e.preventDefault();
+  const r = await api("/api/password", {method: "POST", body: Object.fromEntries(new FormData(e.target))});
+  if (r.ok) { e.target.reset(); toast("Password changed"); }
+}
+
+showTab(tab);
+poll();
+</script>
+</body>
+</html>

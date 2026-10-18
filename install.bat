@@ -18,14 +18,14 @@ if not exist venv\Scripts\python.exe (
 
 echo Installing packages...
 venv\Scripts\python.exe -m pip install --upgrade pip
-venv\Scripts\python.exe -m pip install "opencv-python>=4.8,<5" numpy pillow
+venv\Scripts\python.exe -m pip install "opencv-python>=4.8,<5" numpy flask pyserial
 if errorlevel 1 goto fail
 
 echo Downloading face models...
-venv\Scripts\python.exe lab_monitor.py --download
+venv\Scripts\python.exe monitor.py --download
 if errorlevel 1 goto fail
 
-venv\Scripts\python.exe lab_monitor.py --selftest
+venv\Scripts\python.exe monitor.py --selftest
 if errorlevel 1 goto fail
 
 echo.

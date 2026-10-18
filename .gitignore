@@ -11,3 +11,5 @@ lab_log.csv
 settings.json
 timetable.csv
 Attendance/*.csv
+Recordings/
+server.log
