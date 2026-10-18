@@ -56,7 +56,7 @@ MODEL_URLS = {
 STUDENT_FIELDS = ["Enrollment", "Name", "Role", "Date", "Time"]
 ROLES = ["Student", "Faculty"]
 DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-TT_FIELDS = ["Day", "Start", "End", "Subject", "Faculty"]
+TT_FIELDS = ["Day", "Start", "End", "Subject", "Faculty", "MaxStudents"]
 MODES = ["Auto (timetable)", "Always alert", "Off"]
 ENROLL_PROMPTS = ["Look straight", "Turn head left and right", "Tilt head up and down",
                   "Smile / laugh", "Tongue out, funny faces", "Talk, open mouth wide",
@@ -207,6 +207,12 @@ def slot_at(rows, dt):
         if r["Day"] == day and r["Start"] <= hm < r["End"]:
             return r
     return None
+
+
+def slot_limit(slot):
+    """Max students for a timetable slot (0 = no limit)."""
+    v = str((slot or {}).get("MaxStudents") or "").strip()
+    return int(v) if v.isdigit() else 0
 
 
 def iou(a, b):
@@ -524,6 +530,7 @@ class Monitor:
                 "enrolled": len(set(self.labels)), "samples": len(self.labels), "log_count": len(self.log_rows),
                 "attendance": att,
                 "count": {"total": total, "faculty": staff, "students": students,
+                          "limit": slot_limit(self.att["slot"]) if self.att else 0,
                           "staff": "Present" if staff_present else "Absent",
                           "staff_names": self.staff_names if staff_present else [],
                           "staff_last_seen": f"{datetime.datetime.fromtimestamp(self.staff_seen):%H:%M:%S}"
@@ -560,11 +567,17 @@ class Monitor:
             return "Start/End must be HH:MM (24h)"
         if end <= start:
             return "End must be after Start"
+        if row["MaxStudents"] and not row["MaxStudents"].isdigit():
+            return "Max students must be a whole number (empty = no limit)"
         if not row["Subject"]:
             return "Subject required"
         with self.lock:
             self.timetable.append(row)
             self._save_timetable()
+
+    def timetable_rows(self):
+        with self.lock:
+            return [{**r, "live": bool(self.att) and self.att["slot"] is r} for r in self.timetable]
 
     def delete_slot(self, i):
         with self.lock:
@@ -827,6 +840,10 @@ class Monitor:
         if staff_here:
             self.staff_seen, self.staff_names = time.time(), staff_here
         total, staff, students = head_count([v.tracks], self.faculty)
+        limit = slot_limit(slot)
+        in_lab = head_count([u.tracks for u in self.views], self.faculty)[2]
+        if main and slot and self.mode == MODES[0] and limit and in_lab > limit:
+            self.status = (f"OVER LIMIT: {in_lab}/{limit} students - {slot['Subject']} {slot['Start']}-{slot['End']}", "orange")
         cv2.putText(frame, now.strftime("%Y-%m-%d %H:%M:%S"), (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(frame, f"People {total} | Faculty {staff} | Students {students}", (10, h - 15),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
@@ -863,6 +880,8 @@ def selftest():
     assert slot_at(tt, fri.replace(hour=10, minute=30)) is None   # end is exclusive
     assert slot_at(tt, fri.replace(hour=8, minute=59)) is None
     assert slot_at(tt, datetime.datetime(2026, 10, 15, 9, 30)) is None  # Thursday
+    assert slot_limit(tt[0]) == 0 and slot_limit(None) == 0               # old timetable.csv: no column
+    assert slot_limit({"MaxStudents": "20"}) == 20 and slot_limit({"MaxStudents": ""}) == 0
 
     assert abs(iou((0, 0, 10, 10), (0, 0, 10, 10)) - 1) < 1e-6
     assert iou((0, 0, 10, 10), (20, 20, 5, 5)) == 0

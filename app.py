@@ -118,7 +118,7 @@ def set_mode():
 def timetable():
     if request.method == "POST":
         return ok(mon.add_slot(request.json))
-    return jsonify(mon.timetable)
+    return jsonify(mon.timetable_rows())
 
 
 @app.route("/api/timetable/<int:i>", methods=["DELETE"])

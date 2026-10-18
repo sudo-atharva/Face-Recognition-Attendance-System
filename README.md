@@ -21,7 +21,7 @@ To open it from a phone or laptop on the same WiFi, use `http://<lab-pc-ip>:5000
 | **Enroll person** / Users → Add user | Enter ID + name, stand in front of the lab camera and follow the prompts in the status bar (straight, turn, tilt, smile, tongue out, talk...). 70 samples are captured. |
 | Users | Add more face samples, rename, delete, **Make faculty** / **Make student** |
 | Live counts (under the video) | People in lab, faculty, students (everyone not marked faculty, unknown faces included) and **Staff: Present / Absent**. Staff turns Absent `STAFF_ABSENT_S` seconds (default 10) after the last faculty face leaves view. Faculty are left out of student attendance. |
-| Timetable | Add / delete lab slots |
+| Timetable | Add / delete lab slots, each with an optional **max students**. During the class the slot shows the live student count (e.g. `19/20`); above the limit the row turns red and the status bar shows **OVER LIMIT** |
 | Attendance | Present / absent for the current class, plus downloadable sheets (`Attendance/<Subject>_<date>_<start>.csv`) |
 | Alert log | Detections while the lab is not booked, with snapshots (`Intrusions/`) |
 | Recordings | WiFi camera clips: play in the browser or download (`Recordings/*.webm`) |

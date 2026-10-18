@@ -94,7 +94,7 @@ h3{margin:14px 0 6px}
     </section>
 
     <section id="timetable">
-      <div class="scroll"><table><thead><tr><th>Day</th><th>Start</th><th>End</th><th>Subject</th><th>Faculty</th><th></th></tr></thead>
+      <div class="scroll"><table><thead><tr><th>Day</th><th>Start</th><th>End</th><th>Subject</th><th>Faculty</th><th>Max students</th><th>Students now</th><th></th></tr></thead>
         <tbody id="ttBody"></tbody></table></div>
       <form class="row" onsubmit="addSlot(event)">
         <select name="Day"><option>Mon</option><option>Tue</option><option>Wed</option><option>Thu</option><option>Fri</option><option>Sat</option><option>Sun</option></select>
@@ -102,6 +102,7 @@ h3{margin:14px 0 6px}
         <input type="time" name="End" value="10:00" required>
         <input name="Subject" placeholder="Subject" required>
         <input name="Faculty" placeholder="Faculty">
+        <input type="number" name="MaxStudents" min="1" placeholder="Max students">
         <button class="primary">Add slot</button>
       </form>
     </section>
@@ -204,6 +205,7 @@ h3{margin:14px 0 6px}
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const COLORS = {green:"var(--green)", red:"var(--red)", darkred:"var(--darkred)", grey:"var(--grey)", orange:"var(--orange)", blue:"var(--blue)"};
+let count = null;
 let tab = new URLSearchParams(location.search).get("tab") || (() => { try { return localStorage.getItem("tab"); } catch (e) {} })() || "attendance", lastNotice = null, lastLogCount = -1;
 
 async function api(path, opts = {}) {
@@ -248,8 +250,8 @@ async function poll() {
     $("#wakeBtn").style.display = s.awake ? "none" : "";
     if ($("#pirStatus")) $("#pirStatus").textContent = "Status: " + s.pir;
     if ($("#cam2Url")) $("#cam2Url").textContent = s.cam2_url ? "Saved stream URL: " + s.cam2_url : "WiFi camera off";
-    const c = s.count;
-    $("#counts").innerHTML = `<span>In lab: ${c.total}</span><span>Faculty: ${c.faculty}</span><span>Students: ${c.students}</span>
+    const c = count = s.count;
+    $("#counts").innerHTML = `<span>In lab: ${c.total}</span><span>Faculty: ${c.faculty}</span><span class="${c.limit && c.students > c.limit ? "Absent" : ""}">Students: ${c.students}${c.limit ? "/" + c.limit : ""}</span>
       <span class="${c.staff}">Staff: ${c.staff}${c.staff_names.length ? " (" + esc(c.staff_names.join(", ")) + ")"
         : c.staff_last_seen ? " | last seen " + esc(c.staff_last_seen) : ""}</span>`;
     $("#cancelEnroll").style.display = s.enrolling ? "" : "none";
@@ -259,6 +261,7 @@ async function poll() {
       `<tr class="${r.status}"><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td>${r.status}</td><td>${esc(r.time)}</td></tr>`).join("");
     if (lastNotice !== null && s.notice && s.notice !== lastNotice) { toast(s.notice); if (tab === "users") loadUsers(); }
     lastNotice = s.notice;
+    if (tab === "timetable" && !document.querySelector("#timetable form :focus")) loadTimetable();
     if (s.log_count !== lastLogCount && tab === "log") loadLog();
     lastLogCount = s.log_count;
   } catch (e) {
@@ -272,9 +275,13 @@ async function setMode(mode) { await api("/api/mode", {method: "POST", body: {mo
 
 async function loadTimetable() {
   const rows = await api("/api/timetable");
-  $("#ttBody").innerHTML = rows.map((r, i) => `<tr><td>${esc(r.Day)}</td><td>${esc(r.Start)}</td><td>${esc(r.End)}</td>
-    <td>${esc(r.Subject)}</td><td>${esc(r.Faculty)}</td><td><button class="danger" onclick="delSlot(${i})">Delete</button></td></tr>`).join("")
-    || `<tr><td colspan="6" class="info">No slots yet. Lab is in alert mode all the time.</td></tr>`;
+  $("#ttBody").innerHTML = rows.map((r, i) => {
+    const max = +r.MaxStudents || 0, over = r.live && count && max && count.students > max;
+    const now = r.live && count ? `${count.students}${max ? "/" + max : ""}${over ? " OVER LIMIT" : ""}` : "";
+    return `<tr class="${over ? "Absent" : r.live ? "Present" : ""}"><td>${esc(r.Day)}</td><td>${esc(r.Start)}</td><td>${esc(r.End)}</td>
+    <td>${esc(r.Subject)}</td><td>${esc(r.Faculty)}</td><td>${max || "-"}</td><td>${now}</td><td><button class="danger" onclick="delSlot(${i})">Delete</button></td></tr>`;
+  }).join("")
+    || `<tr><td colspan="8" class="info">No slots yet. Lab is in alert mode all the time.</td></tr>`;
 }
 async function addSlot(e) {
   e.preventDefault();
